@@ -1,11 +1,6 @@
 //Patrick Hoey
-//Homework 1 - Art
-//Due 22-Sept-2003
 
-//Professor Georges Grinstein
-//Fall Semester 2003
-//Interactive Data Visualization
-//91.541
+import ddf.minim.*;
 
 //ship dimensions
 int ship_width = 6;
@@ -21,22 +16,25 @@ int numBugs = 10;
 int total_size = 640*480;
 
 //display buffers
-int[] dataPixels = new int[640*480]; //primary display buffer
 int[] tempPixels = new int[640*480]; //backbuffer
 
 //Image datatype - supports GIF or JPG
-BImage b;
+PImage backgroundImage;
 
 //font for display
-BFont font;
+PFont font;
+
+Minim minim;
 
 //sound effects for game
-BSound shoot;
-BSound endgame;
-BSound shout;
-BSound shield_sound;
-BSound hit_sound;
-BSound bak;
+AudioPlayer shoot;
+AudioPlayer endgame;
+AudioPlayer explosion;
+AudioPlayer shield_sound;
+AudioPlayer hit_sound;
+AudioPlayer background_loop;
+
+boolean isDestroyed = false;
 
 //enemy bugs
 Bug bugs[] = new Bug[numBugs];
@@ -56,73 +54,87 @@ void setup() {
   background(0);
 
   //initialize image data
-  b = loadImage("supernova.jpg");
-
+  backgroundImage = loadImage("supernova_640x480.png");
+ 
+  
    //a little optimization so that the size of display does not get recomputed
    //everytime it checks in a loop 
    total_size = width*height;
 
   //init font
   font = loadFont("OCR-B.vlw.gz");
-  setFont(font, 20);
-  hint(SMOOTH_IMAGES);
+  textFont(font, 20);
+  //hint(ENABLE_OPENGL_4X_SMOOTH);
 
   //init sounds
-  beginSound();
-  shoot = loadSound("st_fire1.wav");
-  endgame = loadSound("you_lose.wav");
-  shout = loadSound("scream2.wav");
-  shield_sound = loadSound("transport2.wav");
-  hit_sound = loadSound("hit.wav");
-  bak = loadSound("background.wav");
+  minim = new Minim(this);
+  shoot = minim.loadFile("laser.mp3");
+  endgame = minim.loadFile("endgame.mp3");
+  explosion = minim.loadFile("explosion.mp3");
+  shield_sound = minim.loadFile("shield.mp3");
+  hit_sound = minim.loadFile("enemy_hit.mp3");
+  background_loop = minim.loadFile("background_loop.mp3");
+
+  //System.out.println("Length of sample is " + shoot.length());
+ 
+  //play background music
+  background_loop.loop();
+  //background_loop.play();
 
   //copy contents of image to array
   for(int i =0; i < total_size; i++) {
-    dataPixels[i] = b.pixels[i];
+    tempPixels[i] = backgroundImage.pixels[i];
   }
   // Init bugs
   for(int i = 0; i < numBugs; i++) {
     bugs[i] = new Bug();
   }
 
-  rectMode(CENTER_RADIUS);
+  rectMode(CENTER);
   noStroke();
 }
 
 //main game loop
-void loop() {
-  //display image to screen very quickly since copies directly into memory (little overhead)
-  //this is a direct Java call
-  System.arraycopy(dataPixels, 0, pixels, 0, total_size);
-
+void draw() {
+  //clear background each frame
+  background(0);
+ 
+  if( false == isDestroyed ){
+      image(backgroundImage, 0, 0, width, height);
+  }
+  
 //display the shield object
   shield.display();
 
   fill(255,255,255);
   text("Score: " + score, 10,20);
-//play background music
-  repeat(bak);
 
   int i = 0;
   int firstElement = 0;
-  int secondElement = width;
   int lastElement = (total_size - width);
   int middleElement = ( (total_size)/2  );
 
+  backgroundImage.loadPixels();
+
   //copy last element to first element in temp array
   for(i = lastElement, firstElement = 0; i < total_size; i++, firstElement++) {
-    tempPixels[firstElement] = dataPixels[i];
+      tempPixels[firstElement] = backgroundImage.pixels[i];
   }
+  
+  //System.out.println(" i for first element: " + i + " first element " + firstElement );
 
+  int secondElement = width;
   //copy rest data in temp array (back buffer)
-  for( i = 0; i < total_size; i++, secondElement++){
-    if(secondElement < total_size)
-    tempPixels[secondElement] = dataPixels[i];
+  for( i = 0; i < total_size && secondElement < total_size; i++, secondElement++){
+      tempPixels[secondElement] = backgroundImage.pixels[i];
   }
 
+  
   //copy entire temp array to dataPixel array (display buffer)
-  for( i = 0; i < total_size; i++)
-  dataPixels[i] = tempPixels[i];
+  for( i = 0; i < total_size; i++){
+      backgroundImage.pixels[i] = tempPixels[i];
+  }
+  backgroundImage.updatePixels();
 
 //display ship
   ship.display();
@@ -132,15 +144,19 @@ void loop() {
   for( i = 0; i < numBugs; i++) {
     bugs[i].display();
     bugs[i].move();
+    
+    //System.out.println("Created: " + bugs[i].bug_x + "," + bugs[i].bug_y);
+    
     if( bugs[i].collision == true ) {
       if( shield.shield_hit > 0 ) {
         shield.shield_hit--;
         bugs[i].collision = false;
-        stop(shield_sound);
-        play(shield_sound);
-      }else if(shield.shield_hit == 0) {
-        play(shout);
-        play(endgame);
+        shield_sound.rewind();
+        shield_sound.play();
+      }else{
+        background_loop.pause();
+        explosion.play();
+        endgame.play();
         ship.destroyed();
       }
     }
@@ -156,8 +172,8 @@ void loop() {
       bugs[i].dx = 0;
       score++;
       missile.fired = false;
-      //stop(hit_sound);
-      //play(hit_sound);
+      hit_sound.rewind();
+      hit_sound.play();
     }
   }
 
@@ -167,8 +183,8 @@ void loop() {
   && missile.fired == false) {
     missile.fired = true;
     missile.display(ship.top_left_X, ship.top_left_Y);
-    //stop(shoot);
-    //play(shoot);
+    shoot.rewind();
+    shoot.play();
   }
 
 //increments the missile object location if it was fired
@@ -177,7 +193,7 @@ void loop() {
   }
 
   //fill back to a default so background is not affected
-  fill(255);
+  //fill(255);
 }
 
 //this is the shield object class
@@ -278,10 +294,11 @@ class Ship {
 
   void destroyed() {
     destroyed = true;
+    isDestroyed = true;
     fill(0,0,0);
     rect(0,0,width, height);
     fill(255,255,255);
-    setFont(font, 44);
+    textFont(font, 30);
     text("Your ship is Destroyed", 50 , height / 2 );
     text("Please try again...", 50, (height/2) + 30 );
   }
@@ -316,7 +333,7 @@ class Bug {
   Bug() {
     bug_x = (int)random(width);
     bug_y = (int)random(height);
-    bug_dir = random(9)+1;
+    bug_dir = random(2,5);
     bug_col = 0;
     bug_size = 10;
     dx = 0;
@@ -332,6 +349,8 @@ class Bug {
   void move() {
     bug_x += dx;
     bug_y += bug_dir;
+    
+    //System.out.println("Current bug: " + bug_x + "," + bug_y);
 
     this.clip();
     this.collision();
@@ -340,8 +359,10 @@ class Bug {
   void clip() {
     //if bug is off the bottom of screen
     if( bug_y > height+bug_size ) {
-      bug_x = random(width, 0);
+      //System.out.println("Clip bug before: " + bug_x + "," + bug_y);
+      bug_x = random(2, width-2);
       bug_y = -height/2 - bug_size;
+      //System.out.println("Clip bug after: " + bug_x + "," + bug_y);
       dx = 0;
     }
   }
@@ -370,18 +391,22 @@ class Bug {
     //check collision with top wall
     if ( bug_y < bug_size && bug_dir < 0) {
       bug_dir *= -1;
+      //System.out.println("Collision with top wall");
     }
 
     //check with collisions on right wall
-    if ( bug_x > width - bug_size ) {
+    if ( bug_x > (width - bug_size) ) {
       dx *= -1;
+      //System.out.println("Collision with right wall");
     }
     //check collision with left wall
     if( bug_x < bug_size ) {
       dx *= -1;
+      //System.out.println("Collision with left wall");
     }
 
   }//end collision
 
 } //end of class
+
 
