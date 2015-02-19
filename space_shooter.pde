@@ -45,6 +45,18 @@ Missile missile = new Missile();
 //shield
 Shield shield = new Shield();
 
+void keyPressed() {
+  final int k = keyCode;
+
+  if (k == 'P')
+    if (looping){
+       noLoop();
+    }else{
+      loop();
+    }
+}
+
+
 //initialization function
 void setup() {
 
@@ -95,7 +107,7 @@ void setup() {
 }
 
 //main game loop
-void draw() {
+void draw() {  
   //clear background each frame
   background(0);
  
